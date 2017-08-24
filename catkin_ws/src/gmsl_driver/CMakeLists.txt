@@ -40,6 +40,8 @@ set(Driveworks_LIBRARY /usr/local/driveworks/lib/)
 
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /usr/local)
 
+message(STATUS "===========================")
+
 if(NOT DEFINE_ENABLE_TCP_SOCKET) 
 	message(STATUS "Building ROS Support")
 	find_package(catkin REQUIRED COMPONENTS
@@ -55,6 +57,8 @@ if(NOT DEFINE_ENABLE_TCP_SOCKET)
 else(NOT DEFINE_ENABLE_TCP_SOCKET)
 	message(STATUS "Building TCP Support")
 endif(NOT DEFINE_ENABLE_TCP_SOCKET)
+
+message(STATUS "===========================")
 
 link_directories(
   ${Driveworks_LIBRARY})

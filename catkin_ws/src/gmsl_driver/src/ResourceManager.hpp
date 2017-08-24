@@ -32,16 +32,9 @@
 #define DRIVEWORKSSDK_RESOURCEMANAGER_HPP__
 
 #include <memory>
-
 #include <dw/core/Context.h>
-#include <dw/image/ImageStreamer.h>
-#include <dw/renderer/Renderer.h>
-
 #include <ProgramArguments.hpp>
 #include <dw/sensors/Sensors.h>
-
-// Sample Framework
-//#include <SampleFramework.hpp>
 
 /**
  * RAII Manager for the resources that are not the object of this sample
@@ -49,38 +42,28 @@
 
 class ResourceManager
 {
-  private:
-    dwContextHandle_t m_SDKHandle;
-    dwSALHandle_t m_salHandle;
-    
-  protected:
-    dwStatus initDriveworks();
-    dwStatus initSAL();
+    public:
+        ResourceManager()
+                : m_SDKHandle(DW_NULL_HANDLE)
+                , m_salHandle(DW_NULL_HANDLE) {}
 
-    void releaseSAL();
-    void releaseDriveworks();
+        ~ResourceManager();
 
-  public:
-    ResourceManager()
-            : m_SDKHandle(DW_NULL_HANDLE)
-            , m_salHandle(DW_NULL_HANDLE)
-    {}
+        dwStatus initializeResources(int argc, const char *argv[],
+                                     ProgramArguments& arguments);
 
-    ~ResourceManager();
+        const dwContextHandle_t getSDK() const { return m_SDKHandle; }
+        const dwSALHandle_t     getSAL() const { return m_salHandle; }
 
-    dwStatus initializeResources(int argc,
-                                 const char *argv[],
-                                 ProgramArguments& arguments);
+    protected:
+        dwStatus initDriveworks();
+        dwStatus initSAL();
 
-    const dwContextHandle_t getSDK() const
-    {
-        return m_SDKHandle;
-    }
-
-    const dwSALHandle_t getSAL() const
-    {
-        return m_salHandle;
-    }
+        void     releaseSAL();
+        void     releaseDriveworks();
+    private:
+        dwContextHandle_t m_SDKHandle;
+        dwSALHandle_t     m_salHandle;
 };
 
 #endif //DRIVEWORKSSDK_RESOURCEMANAGER_HPP__
