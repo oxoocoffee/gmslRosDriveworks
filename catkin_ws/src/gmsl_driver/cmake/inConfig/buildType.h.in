@@ -22,7 +22,8 @@ typedef list< pair<string, string> >    TArgPairList;
 typedef vector<string>                  TStringVec;
 typedef TStringVec                      TArgVec;
 
-#define TCP_SERVER   		@DEFINE_TCP_SERVER@
+#define TCP_SERVER   		    @DEFINE_TCP_SERVER@
+#define PRINT_DURATION          @DEFINE_PRINT_DURATION@
 #define PATH_SEPARATOR          @PATH_SEPARATOR@
 
 #endif // GMSL_BUILD_RTPE_H

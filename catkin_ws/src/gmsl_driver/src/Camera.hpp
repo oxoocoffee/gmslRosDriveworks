@@ -31,41 +31,37 @@
 #include <ProgramArguments.hpp>
 
 #include <dw/sensors/Sensors.h>
-#include <dw/sensors/SensorSerializer.h>
 #include <dw/sensors/camera/Camera.h>
 #include <dw/image/ImageStreamer.h>
-#include <dw/image/FormatConverter.h> 
+#include <dw/image/FormatConverter.h>
 
 #include <string>
 #include <vector>
 
-class Camera 
+class Camera
 {
-	
 	public:
-		Camera(dwSensorHandle_t &sensor, dwSensorParams sensorParams, dwSALHandle_t sal, dwContextHandle_t sdk, ProgramArguments arguments,  bool record);
-		~Camera();
+		Camera(dwSensorHandle_t &sensor,
+               dwSensorParams   sensorParams,
+               dwSALHandle_t    sal,
+               dwContextHandle_t sdk,
+               ProgramArguments arguments);
+
+		~Camera() {};
 		void stop_camera();
 		bool start();
 		//void capture_camera();
 		dwSensorHandle_t getSensor() { return sensor;}
-	
-		
-		dwSensorHandle_t sensor;
-		uint32_t numSiblings;
-		uint32_t width;
-		uint32_t height;
-		dwImageStreamerHandle_t streamer;
-		dwImageFormatConverterHandle_t converter;
-		std::vector<dwImageNvMedia *> rgbaImagePool;
-		dwSensorSerializerHandle_t serializer;
-		dwImageType imageType;
-		bool record;
-	
+        dwImageType      getImageType() { return cameraImageProperties.type; }
+
+		dwSensorHandle_t               sensor;
+		uint32_t                       numSiblings;
+		dwImageFormatConverterHandle_t yuv2rgbaConverter;
+        dwCameraProperties             cameraProperties;
+        dwImageProperties              cameraImageProperties;
+		std::vector<dwImageNvMedia *>  rgbaImagePool;
 
 	protected:
 		void initImagePool(dwContextHandle_t sdk);
 		void initFormatter(dwContextHandle_t sdk);
-		void initSerializer(ProgramArguments arguments);
-
 };

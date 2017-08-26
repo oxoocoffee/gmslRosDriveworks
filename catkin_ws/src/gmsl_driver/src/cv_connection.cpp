@@ -7,7 +7,7 @@
 
 #define TCP_WITH_CV	1
 
-#if !TCP_SERVER	
+#if !TCP_SERVER
   #include <cv_bridge/cv_bridge.h>
   #include <sensor_msgs/Image.h>
   #include <sensor_msgs/image_encodings.h>
@@ -16,8 +16,6 @@
       pub = it.advertise(topic_name, 1);
   }
 #endif
-
-
 
 #if TCP_SERVER
 
@@ -33,53 +31,79 @@ OpenCVConnector::OpenCVConnector(int camID) : _camID(camID), counter(0) {
 	std::cout << "CamearID[" << _camID << "]" << std::endl;
 }
 
+
 bool OpenCVConnector::WriteToOpenCV(TCPSocket& client, unsigned char* buffer, int width, int height)
 {
-	struct message_t message;
+    struct message_t message;
+
+#if PRINT_DURATION
+    TChrono start;
+    TChrono step;
+    TChrono end;
+    TDuration duration;
+
+    start = std::chrono::system_clock::now();
+    step = start;
+#endif // PRINT_DURATION
 
 #if TCP_WITH_CV
-	int bitsPerPixel = 3;
+    int bitsPerPixel = 3;
 
-	cv::Mat converted;
+    cv::Mat converted;
 
-	cv::Mat mat_img(cv::Size(width, height), CV_8UC4, buffer);
+    cv::Mat mat_img(cv::Size(width, height), CV_8UC4, buffer);
 
-	cv::cvtColor(mat_img, converted, cv::COLOR_RGBA2RGB);
+    cv::cvtColor(mat_img, converted, cv::COLOR_RGBA2RGB);
 
-        uint8_t* data    = converted.data; 
+#if PRINT_DURATION
+    end = std::chrono::system_clock::now();
+    duration = end - step;
+    step = end;
+    std::cout << "  openCV: " << duration.count() << " sec" << std::endl;
+#endif // PRINT_DURATION
+
+    uint8_t* data    = converted.data;
 #else
 	int bitsPerPixel = 4;
-        uint8_t* data    = buffer; 
+    uint8_t* data    = buffer;
 
 #endif
 
-	message.size     = 5 + width*height*bitsPerPixel; 
+	message.size     = 5 + width*height*bitsPerPixel;
 	message.cameraID = _camID;
 	message.width    = width;
 	message.height   = height;
 
-	// Convert to char array
-	const uint8_t* msg = reinterpret_cast<const uint8_t*>(&message); 
+    // Convert to char array
+    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&message);
 
-	if(client.send(msg, sizeof(message_t)) <= 0)
-        {
-		std::cerr << "Connection Terminated" << std::endl;
-		return false;
-	}
+    if(client.send(msg, sizeof(message_t)) <= 0)
+    {
+        std::cerr << "Connection Terminated" << std::endl;
+    	return false;
+    }
 
+    if(client.send(data, width * height * bitsPerPixel) <= 0)
+    {
+    	std::cerr << "Connection Terminated" << std::endl;
+    	return false;
+    }
 
-	if(client.send(data, width * height * bitsPerPixel) <= 0)
-        {
-		std::cerr << "Connection Terminated" << std::endl;
-		return false;
-	}
+    #if PRINT_DURATION
+        end = std::chrono::system_clock::now();
+        duration = end - step;
+        step = end;
+        std::cout << "  Socket Send: " << duration.count()
+                  << " sec. Bytes: " << (width * height * bitsPerPixel) << std::endl;
+    #endif // PRINT_DURATION
 
-	return true;
+    return true;
 }
 
 #else
 
-void OpenCVConnector::WriteToOpenCV(unsigned char* buffer, int width, int height) {
+void OpenCVConnector::WriteToOpenCV(unsigned char* buffer, int width, int height)
+{
     // create a cv::Mat from a dwImageNvMedia rgbaImage
     cv::Mat mat_img(cv::Size(width, height), CV_8UC4, buffer);
 
@@ -91,13 +115,11 @@ void OpenCVConnector::WriteToOpenCV(unsigned char* buffer, int width, int height
     sensor_msgs::Image img_msg; // >> message to be sent
 
     std_msgs::Header header; // empty header
-    header.seq = counter; // user defined counter
-    header.stamp = ros::Time::now(); // time
-    img_bridge = cv_bridge::CvImage(header, sensor_msgs::image_encodings::RGB8, converted);
+    header.seq      = counter; // user defined counter
+    header.stamp    = ros::Time::now(); // time
+    img_bridge      = cv_bridge::CvImage(header, sensor_msgs::image_encodings::RGB8, converted);
     img_bridge.toImageMsg(img_msg); // from cv_bridge to sensor_msgs::Image
     pub.publish(img_msg); // ros::Publisher pub_img = node.advertise<sensor_msgs::Image>("topic", queuesize);
 }
 
 #endif
-
-

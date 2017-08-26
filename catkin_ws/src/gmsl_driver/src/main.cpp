@@ -31,55 +31,39 @@
 #include <iostream>
 #include <signal.h>
 #include <fstream>
-
-#include <stdio.h>
-#include <stdlib.h>
 #include <memory>
-
-#ifdef LINUX
-#include <execinfo.h>
-#include <unistd.h>
-#endif
-
 #include <cstring>
 #include <functional>
 #include <list>
 #include <iomanip>
 #include <thread>
 #include <vector>
-
 #include <chrono>
-#include <mutex>
-#include <condition_variable>
+
+#ifdef LINUX
+#include <execinfo.h>
+#include <unistd.h>
+#endif
 //#include <lodepng.h>
 
 #include "cv_connection.hpp"
 
 // SAMPLE COMMON
-#include <Checks.hpp>
+//#include <Checks.hpp>
 #include <ProgramArguments.hpp>
 #include <ConsoleColor.hpp>
 #include <ResourceManager.hpp>
-
 
 // CORE
 #include <dw/core/Context.h>
 #include <dw/core/Logger.h>
 
-// RENDERER
-#include <dw/renderer/Renderer.h>
-
 // HAL
 #include <dw/sensors/Sensors.h>
-#include <dw/sensors/SensorSerializer.h>
 #include <dw/sensors/camera/Camera.h>
 
 // IMAGE
 #include <dw/image/FormatConverter.h>
-#include <dw/image/ImageStreamer.h>
-//#include <SampleFramework.hpp>
-
-
 
 #include "Camera.hpp"
 
@@ -87,12 +71,6 @@
 // Variables
 //------------------------------------------------------------------------------
 static volatile bool g_run = true;
-static bool gTakeScreenshot = false;
-static int gScreenshotCount = 0;
-
-#if TCP_SERVER
- static TCPSocket gTCPServer;
-#endif
 
 ProgramArguments gArguments(
 {
@@ -145,8 +123,8 @@ int main(int argc, const char **argv)
         printUsage();
         return 0;
     }
-
 #endif
+
     gResources.initializeResources(argc, argv, gArguments);
     std::vector<Camera> cameras;
 
@@ -173,12 +151,12 @@ int main(int argc, const char **argv)
 
     for (auto &camera : cameras)
     {
-	    if(camera.imageType != DW_IMAGE_NVMEDIA)
-	    {
-		std::cerr << "Error: Expected nvmedia image type, received "
-			  << cameraImageType << " instead." << std::endl;
-		exit(-1);
-	    }
+        if(camera.getImageType() != DW_IMAGE_NVMEDIA)
+        {
+            std::cerr << "Error: Expected nvmedia image type, received "
+                      << cameraImageType << " instead." << std::endl;
+            exit(-1);
+        }
     }
 
     // Allocate buffer for parsed embedded data
@@ -186,7 +164,6 @@ int main(int argc, const char **argv)
     sensorData.bottom.data = new uint8_t[MAX_EMBED_DATA_SIZE];
     sensorData.top.bufferSize    = MAX_EMBED_DATA_SIZE;
     sensorData.bottom.bufferSize = MAX_EMBED_DATA_SIZE;
-
 
     runNvMedia_pipeline(gResources.getSDK(), cameras);
 
@@ -198,7 +175,6 @@ int main(int argc, const char **argv)
     //        of the GMSL (nvmedia) pipeline. The issue is known and will be fixed in the future.
     //dwRenderer_release(&renderer);
 
-
     delete[] sensorData.top.data;
     delete[] sensorData.bottom.data;
 
@@ -208,51 +184,52 @@ int main(int argc, const char **argv)
 //------------------------------------------------------------------------------
 void initSensors(dwSALHandle_t sal, std::vector<Camera> &cameras)
 {
-    bool recordCamera = false; // !gArguments.get("write-file").empty();
     std::string selector = gArguments.get("selector-mask");
-
-    dwStatus result;
 
     // identify active ports
     int idx             = 0;
     int cnt[3]          = {0, 0, 0};
     std::string port[3] = {"ab", "cd", "ef"};
-    for (size_t i = 0; i < selector.length() && i < 12; i++, idx++) {
+    for (size_t i = 0; i < selector.length() && i < 12; i++, idx++)
+    {
         const char s = selector[i];
-        if (s == '1') {
+
+        if (s == '1')
             cnt[idx / 4]++;
-        }
     }
 
     // how many cameras selected in a port
     g_numCameras = 0;
-    for (size_t p = 0; p < 3; p++) {
-        if (cnt[p] > 0) {
+    for (size_t p = 0; p < 3; p++)
+    {
+        if (cnt[p] > 0)
+        {
             std::string params;
 
             params += std::string("csi-port=") + port[p];
             params += ",camera-type=" + gArguments.get((std::string("type-") + port[p]).c_str());
             params += ",camera-count=4"; // when using the mask, just ask for a;ll cameras, mask will select properly
 
-            if (selector.size() >= p*4) {
+            if (selector.size() >= p*4)
                 params += ",camera-mask="+ selector.substr(p*4, std::min(selector.size() - p*4, size_t{4}));
-            }
 
             params += ",slave="  + gArguments.get("slave");
             params += ",cross-csi-sync="  + gArguments.get("cross-csi-sync");
             params += ",fifo-size="  + gArguments.get("fifo-size");
-	    params += ",output-format=yuv";
+            params += ",output-format=yuv";
 
             dwSensorHandle_t salSensor = DW_NULL_HANDLE;
             dwSensorParams salParams;
             salParams.parameters = params.c_str();
             salParams.protocol = "camera.gmsl";
 
-	    std::cout << "Camera param: " << params << std::endl;
+            std::cout << "Camera param: " << params << std::endl;
 
-	    Camera *cam = new Camera(salSensor, salParams, gResources.getSAL(), gResources.getSDK(), gArguments, recordCamera);
+            Camera *cam = new Camera(salSensor, salParams, gResources.getSAL(), gResources.getSDK(), gArguments);
+
             cameras.push_back(*cam);
-	    (g_numCameras) += cam->numSiblings;
+
+            (g_numCameras) += cam->numSiblings;
         }
     }
 }
@@ -262,8 +239,6 @@ void initSensors(dwSALHandle_t sal, std::vector<Camera> &cameras)
 void runNvMedia_pipeline(dwContextHandle_t sdk,
                          std::vector<Camera> &cameras)
 {
-    bool recordCamera = false; // !gArguments.get("write-file").empty();
-
     // Start all the cameras
     for (auto &camera : cameras)
     	g_run &= camera.start();
@@ -275,12 +250,15 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
     std::cout << "Cameras Size: " << cameras.size() << std::endl;
 
 #if TCP_SERVER
-	gTCPServer.initialize(gArguments.get("host") + ":" + gArguments.get("port"));
 
-	gTCPServer.listen(1);
+    TCPSocket tcpServer;
 
-    	for (int i = 0; i < cameras.size(); i++) 
-		for (int neighbor = 0; neighbor < cameras[i].numSiblings; neighbor++) 
+	tcpServer.initialize(gArguments.get("host") + ":" + gArguments.get("port"));
+
+	tcpServer.listen(1);
+
+    	for (int i = 0; i < cameras.size(); i++)
+		for (int neighbor = 0; neighbor < cameras[i].numSiblings; neighbor++)
 			cv_connectors.push_back(new OpenCVConnector(neighbor));
 
 #else
@@ -298,10 +276,17 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
     	}
 #endif
 
+#if PRINT_DURATION
+    TChrono start;
+    TChrono step;
+    TChrono end;
+    TDuration duration;
+#endif // PRINT_DURATION
+
 #if TCP_SERVER
     while (g_run )
     {
-        TCPSocket* pTcp = gTCPServer.acceptPtr();
+        TCPSocket* pTcp = tcpServer.acceptPtr();
 
         if( pTcp == nullptr)
             continue;
@@ -309,7 +294,7 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
         std::cout << "New Client: " << pTcp->hostAndPort() << std::endl;
 
         TCPSocket::TUniTCPPtr tcpClient(pTcp);
-	bool tcpConnected(true);
+	    bool tcpConnected(true);
 
         while (g_run && tcpConnected )
         {
@@ -319,17 +304,20 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
 #endif
                 for (int i = 0; i < cameras.size(); i++)
                 {
-                    Camera camera = cameras[i];
+#if PRINT_DURATION
+                    std::cout << "----- CAM[" << i << "] FRAME START ----" << std::endl;
 
-                    //Get Camera properties
-                    dwCameraProperties cameraProperties;
-                    dwSensorCamera_getSensorProperties(&cameraProperties, camera.sensor);
+                    start = std::chrono::system_clock::now();
+                    step = start;
+#endif // PRINT_DURATION
+
+                    Camera camera = cameras[i];
 
                     for (int camIdx = i; camIdx < i + camera.numSiblings; camIdx++)
                     {
                         dwCameraFrameHandle_t frameHandle;
                         dwImageNvMedia *frame = nullptr;
-                        dwStatus status = dwSensorCamera_readFrame(&frameHandle, camIdx, 100000, camera.sensor);
+                        dwStatus status = dwSensorCamera_readFrame(&frameHandle, camIdx, 500000, camera.sensor);
                         //Retrieve frames from multiple siblings??
                         //dwStatus status = dwSensorCamera_readFrame(&frameHandle, camera.numSiblings, 1000000, camera.sensor);
                         if (status != DW_SUCCESS)
@@ -338,17 +326,33 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
                             continue;
                         }
 
-                        if( cameraProperties.outputTypes & DW_CAMERA_PROCESSED_IMAGE)
+#if PRINT_DURATION
+                        end = std::chrono::system_clock::now();
+                        duration = end - step;
+                        step = end;
+
+                        std::cout << "  readFrame: " << duration.count() << " sec" << std::endl;
+#endif // PRINT_DURATION
+                        if( camera.cameraProperties.outputTypes & DW_CAMERA_PROCESSED_IMAGE)
                         {
                             status = dwSensorCamera_getImageNvMedia(&frame, DW_CAMERA_PROCESSED_IMAGE, frameHandle);
 
                             if( status != DW_SUCCESS )
                                 std::cout << "\n ERROR getImageNvMedia " << dwGetStatusName(status) << std::endl;
                         }
+#if PRINT_DURATION
+                        end = std::chrono::system_clock::now();
+                        duration = end - step;
+                        step = end;
 
+                        std::cout << "  dwSensorCamera_getImageNvMedia: " << duration.count() << " sec" << std::endl;
+#endif // PRINT_DURATION
                         // get embedded lines
-                        if( cameraProperties.outputTypes & DW_CAMERA_DATALINES)
+                        if( camera.cameraProperties.outputTypes & DW_CAMERA_DATALINES)
                         {
+                            // This is not called???
+                            std::cout << "DW_CAMERA_DATALINES" << std::endl;
+
                             const dwCameraDataLines* dataLines = nullptr;
                             status = dwSensorCamera_getDataLines(&dataLines, frameHandle);
 
@@ -366,9 +370,6 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
                                 std::cout << "Error getting datalines: " << dwGetStatusName(status) << "\r"; //std::endl;
                         }
 
-                        if (frame && recordCamera )
-                            dwSensorSerializer_serializeCameraFrameAsync(frameHandle, camera.serializer);
-
                         // log message
                         //std::cout << frame->timestamp_us;
                         //std::cout << " IMAGE SIZE " << frame->img->width << "x" << frame->img->height;
@@ -381,7 +382,7 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
                             camera.rgbaImagePool.pop_back();
 
                             //std::cout << " CONVERSION YUV->RGBA\n";
-                            status = dwImageFormatConverter_copyConvertNvMedia(rgbaImage, frame, camera.converter);
+                            status = dwImageFormatConverter_copyConvertNvMedia(rgbaImage, frame, camera.yuv2rgbaConverter);
 
                             if (status != DW_SUCCESS)
                             {
@@ -390,6 +391,13 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
                             }
                             else
                             {
+#if PRINT_DURATION
+                                end = std::chrono::system_clock::now();
+                                duration = end - step;
+                                step = end;
+
+                                std::cout << "  dwImageFormatConverter_copyConvertNvMedia: " << duration.count() << " sec" << std::endl;
+#endif // PRINT_DURATION
                                 NvMediaImageSurfaceMap surfaceMap;
 
                                 if (NvMediaImageLock(rgbaImage->img, NVMEDIA_IMAGE_ACCESS_READ, &surfaceMap) == NVMEDIA_STATUS_OK)
@@ -406,18 +414,31 @@ void runNvMedia_pipeline(dwContextHandle_t sdk,
                                     sprintf(fname, "screenshot_%04d.png", gScreenshotCount++);
                                     lodepng_encode32_file(fname, (unsigned char*)surfaceMap.surface[0].mapping, rgbaImage->prop.width, rgbaImage->prop.height);
                                     NvMediaImageUnlock(rgbaImage->img);
-                                    gTakeScreenshot = false;
                                     std::cout << "SCREENSHOT TAKEN to " << fname << "\n";*/
                                     NvMediaImageUnlock(rgbaImage->img);
                                     camera.rgbaImagePool.push_back(rgbaImage);
                                 }
                                 else
                                     std::cout << "CANNOT LOCK NVMEDIA IMAGE - NO SCREENSHOT\n";
+
+#if PRINT_DURATION
+                                end = std::chrono::system_clock::now();
+                                duration = end - step;
+                                step = end;
+
+                                std::cout << "  Lock and Send: " << duration.count() << " sec" << std::endl;
+#endif // PRINT_DURATION
                             }
 
                             dwSensorCamera_returnFrame(&frameHandle);
                         }
                     }
+#if PRINT_DURATION
+                    end = std::chrono::system_clock::now();
+                    duration = end - start;
+
+                    std::cout << "  Total: " << duration.count() << " sec" << " " << (1 / duration.count() ) << " fps" <<  std::endl;
+#endif // PRINT_DURATION
                 } // for (int i = 0; i < cameras.size(); i++)
 
 #if TCP_SERVER
@@ -442,7 +463,7 @@ void sig_handler(int sig)
     (void)sig;
 
     g_run = false;
-    std::cout << "Signal" << std::endl; 
+    std::cout << "Signal" << std::endl;
 }
 
 void printUsage(void)

@@ -3,12 +3,20 @@ project(gmsl_n_cameras)
 
 option(DEFINE_ENABLE_TCP_SOCKET
     "Enable TCP Socket Server" OFF)     # Disabled by default
+option(DEFINE_PRINT_DURATION
+    "Print call duration" OFF)          # Disabled by default
 
 if(DEFINE_ENABLE_TCP_SOCKET)
 	set(DEFINE_TCP_SERVER 1)
 else(DEFINE_ENABLE_TCP_SOCKET)
 	set(DEFINE_TCP_SERVER 0)
 endif(DEFINE_ENABLE_TCP_SOCKET)
+
+if(DEFINE_PRINT_DURATION)
+	set(DEFINE_PRINT_DURATION 1)
+else(DEFINE_PRINT_DURATION)
+	set(DEFINE_PRINT_DURATION 0)
+endif(DEFINE_PRINT_DURATION)
 
 set (CMAKE_CXX_STANDARD 11)
 
@@ -42,12 +50,12 @@ set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /usr/local)
 
 message(STATUS "===========================")
 
-if(NOT DEFINE_ENABLE_TCP_SOCKET) 
+if(NOT DEFINE_ENABLE_TCP_SOCKET)
 	message(STATUS "Building ROS Support")
 	find_package(catkin REQUIRED COMPONENTS
   		roscpp
   		geometry_msgs
-  		cv_bridge 
+  		cv_bridge
   		image_transport
 	)
 
@@ -103,12 +111,12 @@ endif(NOT DEFINE_ENABLE_TCP_SOCKET)
 
 target_link_libraries(${NODE_NAME}
   ${ROS_LIBS}
-  nvmedia  
+  nvmedia
   driveworks
   GLESv2
   EGL
   drm
   ${CUDA_LIBRARY}
-  ${OpenCV_LIBS} 
+  ${OpenCV_LIBS}
   ${CMAKE_THREAD_LIBS_INIT}
 )
